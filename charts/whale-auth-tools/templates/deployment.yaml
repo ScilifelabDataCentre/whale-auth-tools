@@ -1,0 +1,115 @@
+{{- if not .Values.apiTokenSecret.name }}
+{{- fail "apiTokenSecret.name must name an existing Secret" }}
+{{- end }}
+{{- if not .Values.altchaSecret.name }}
+{{- fail "altchaSecret.name must name an existing Secret" }}
+{{- end }}
+{{- if gt (.Values.replicaCount | int) 1 }}
+{{- fail "replicaCount must remain 1 while questionnaire data is stored in SQLite" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "whale-auth-tools.fullname" . }}
+  labels:
+    {{- include "whale-auth-tools.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "whale-auth-tools.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "whale-auth-tools.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "whale-auth-tools.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: whale-auth-tools
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: WHALE_AUTH_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.apiTokenSecret.name }}
+                  key: {{ .Values.apiTokenSecret.key }}
+            - name: ALTCHA_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.altchaSecret.name }}
+                  key: {{ .Values.altchaSecret.hmacSecretKey }}
+            - name: ALTCHA_HMAC_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.altchaSecret.name }}
+                  key: {{ .Values.altchaSecret.hmacKeySecretKey }}
+            - name: DATABASE_PATH
+              value: /data/questionnaires.sqlite3
+            - name: ALTCHA_REQUIRED
+              value: {{ .Values.config.altchaRequired | quote }}
+            - name: ALTCHA_ALGORITHM
+              value: {{ .Values.config.altchaAlgorithm | quote }}
+            - name: ALTCHA_COST
+              value: {{ .Values.config.altchaCost | quote }}
+            - name: ALTCHA_TTL_SECONDS
+              value: {{ .Values.config.altchaTtlSeconds | quote }}
+            - name: CORS_ORIGINS
+              value: {{ .Values.config.corsOrigins | quote }}
+            - name: DOCS_ENABLED
+              value: {{ .Values.config.docsEnabled | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "whale-auth-tools.fullname" .) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

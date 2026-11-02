@@ -1,47 +1,156 @@
-# Template Repository for the SciLifeLab Data Centre
+# Whale Auth Tools
 
-![Status: Work in Progress](https://img.shields.io/badge/status-work%20in%20progress-yellow)
-[![Lychee Link Checker](https://github.com/ScilifelabDataCentre/data-centre-template/actions/workflows/lychee-main.yml/badge.svg)](https://github.com/ScilifelabDataCentre/data-centre-template/actions/workflows/lychee-main.yml)
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22706806-blue)](https://doi.org/10.5281/zenodo.22706806)
+`whale-auth-tools` is a token-protected FastAPI service for the SciLifeLab
+OpenLLM service. It has two responsibilities: generating signed
+[ALTCHA](https://altcha.org/) v2 proof-of-work challenges and collecting a
+structured service-access questionnaire before an Open WebUI user is approved.
 
-This repository provides example configurations for a set of different tools. When creating a new repository with this as a template, remember to update the information to fit **your** repository, and delete any files that only apply to the data-centre-template repository. Each directory / file contains information on how to adopt a template into an already existing repository.
+The service is independent from Open WebUI's database. It stores questionnaire
+data in its own SQLite database and exposes a stable HTTP API, so it can be
+deployed alongside the Open WebUI fork and the OpenLLM Helm deployment without
+coupling releases or sharing credentials.
 
-The end goal is for this repository to be populated with examples implementing guidelines detailed in the [SciLifeLab Data Centre's development guidelines repository](https://github.com/ScilifelabDataCentre/development-guidelines).
+## Questionnaire
 
-## Repository structure
+The service collects university/organisation, one or more positions, SciLifeLab
+affiliation, intended OpenLLM uses, and whether the person wants an invitation
+to the SciLifeLab service-users Slack channel. The positions are PhD student,
+Postdoc, PI, Research engineer, Systems developer, Data steward,
+Bioinformatician, and Other. SciLifeLab affiliation has Infrastructure unit
+staff, Affiliated research group member, and Other options. Slack opt-in
+requires an email address because it is needed for an invitation.
 
-```text
-.
-├── .github/        # GitHub-specific config, e.g. workflows and templates
-│   ├── pull_request_template.md
-│   ├── CODEOWNERS
-│   └── workflows/
-│       └── ...
-├── .config/        # Tool config, one subdirectory per tool
-│   ├── cspell/
-│   ├── lychee/
-│   └── renovate/
-├── docs/architecture/decisions/     # Architecture Decision Record (ADR) template
-├── instructions/   # Templates for instructions, e.g. user-facing
-├── .development-guidelines-version  # Version of the development-guidelines repository that this template aligns with
-├── CITATION.cff            # This repo's CITATION.cff file
-├── CITATION.template.cff   # Template CITATION.cff file
-└── README.md
+The default intended-use options are Chat and writing assistance, Software
+development, Research and data analysis, Teaching and training, Evaluation or
+testing, and Other. A client obtains all choices from the schema endpoint.
+
+## Quick start
+
+Set three independent secrets; do not use the public API token as an ALTCHA
+secret.
+
+```sh
+cp .env.example .env
+# Edit .env and set WHALE_AUTH_API_TOKEN, ALTCHA_HMAC_SECRET and
+# ALTCHA_HMAC_KEY_SECRET.
+docker compose up --build
 ```
 
-## Repository contents
+The service listens on `http://localhost:8080`. Health checks are intentionally
+public at `/healthz` and `/readyz`; every `/api/v1/...` route requires
+`Authorization: Bearer <token>`.
 
-| Configuration                                                        | Purpose                                                                                                                                                                                                                                                                | Related guidelines                                                                                                                                   |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`.development-guidelines-version`](.development-guidelines-version) | Allows us to automatically keep track of when there's a change in the development-guidelines repository that **might** require a change in this repository. See [ADR 0001](docs/architecture/decisions/0001-track-the-development-guidelines-version-with-renovate.md) | -                                                                                                                                                    |
-| [ADR template](docs/architecture/decisions/)                         | Template to use when starting with Architecture Decision Records and adding a new decision.                                                                                                                                                                            | [Architecture Decision Records](https://github.com/ScilifelabDataCentre/development-guidelines/tree/main/adrs)                                       |
-| [`CITATION.cff`](CITATION.cff)                                       | Tells others how to cite **this** repository. Also enables the `Cite this repository` link in the repository side bar.                                                                                                                                                 | [Citing and Citability](https://github.com/ScilifelabDataCentre/development-guidelines/tree/main/citing_and_citability)                              |
-| [`CITATION.template.cff`](CITATION.template.cff)                     | Template CITATION.cff file to copy-paste and adjust to another repository.                                                                                                                                                                                             | [Citing and Citability](https://github.com/ScilifelabDataCentre/development-guidelines/tree/main/citing_and_citability)                              |
-| [`CODEOWNERS` file](.github/CODEOWNERS)                              | Defines which individuals or teams that are responsible for the contents of this repository.                                                                                                                                                                           | -                                                                                                                                                    |
-| [CSpell](.config/cspell/README.md)                                   | Allows spell checking for files changed in a PR                                                                                                                                                                                                                        | -                                                                                                                                                    |
-| [Citation instruction template](instructions/citing.template.md)     | Template for user-facing instructions on how to cite our services and code.                                                                                                                                                                                            | [Making Services and Code Citable](https://github.com/ScilifelabDataCentre/development-guidelines/blob/main/citing_and_citability/making-citable.md) |
-| [Lychee](.config/lychee/README.md)                                   | Verifying that all links in the repository work                                                                                                                                                                                                                        | -                                                                                                                                                    |
-| [Pull request template](.github/pull_request_template.md)            | When a PR is opened, the description is automatically filled with the contents of this file. It helps make pull requests easier to prepare and review.                                                                                                                 | [Pull Request Guidelines](https://github.com/ScilifelabDataCentre/development-guidelines/tree/main/pull_requests)                                    |
-| [Renovate](.config/renovate/README.md)                               | Allows repositories in ScilifelabDataCentre GitHub Organisation to use a custom Renovate preset in their Renovate configuration instead of teams building their own completely from scratch.                                                                           | -                                                                                                                                                    |
+To create a new ALTCHA secret pair without starting the service:
 
-> Links pointing to PRs will be replaced once PRs in `development-guidelines` repository are merged.
+```sh
+docker compose run --rm whale-auth-tools whale-auth-tools generate-altcha-secrets
+```
+
+Save both values in a secret manager, not in Git. `hmacSecret` signs the
+challenge; `hmacKeySecret` is reserved for ALTCHA's optional deterministic
+derived-key signature mode.
+
+## API
+
+Interactive OpenAPI documentation is at `/docs` in the default development
+configuration. Production can disable it with `DOCS_ENABLED=false`.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/questionnaire/schema` | Choices and field metadata for a client-side form |
+| `POST` | `/api/v1/questionnaire/submissions` | Store a questionnaire response |
+| `GET` | `/api/v1/questionnaire/submissions` | List responses for an approval workflow |
+| `DELETE` | `/api/v1/questionnaire/submissions/{id}` | Delete one response |
+| `POST` | `/api/v1/altcha/secrets` | Generate a new pair of ALTCHA HMAC secrets |
+| `POST` | `/api/v1/altcha/challenge` | Create an ALTCHA v2 challenge |
+| `POST` | `/api/v1/altcha/verify` | Verify an ALTCHA payload |
+
+All listed routes require the API token. When `ALTCHA_REQUIRED=true`, an
+`altchaPayload` generated by the official ALTCHA widget/library is also
+required on questionnaire submission.
+
+```sh
+curl http://localhost:8080/api/v1/questionnaire/submissions \
+  -H 'Authorization: Bearer replace-with-api-token' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "organisation": "Uppsala University",
+    "positions": ["PhD student"],
+    "scilifelabAffiliation": "Affiliated research group member",
+    "plannedUses": ["Research and data analysis", "Software development"],
+    "addToSlack": false
+  }'
+```
+
+## Open WebUI integration
+
+Use this service as the registration-intake step, then let Open WebUI own
+identity and access control:
+
+1. Render the schema in the registration flow (or surrounding portal), obtain
+   an ALTCHA challenge from this service, and submit its solved payload with
+   the answers.
+2. Create the user in the SciLifeLab Open WebUI deployment after the intake is
+   accepted. Configure Open WebUI's `DEFAULT_USER_ROLE` as `pending` so an
+   administrator explicitly approves access. The fork at
+   [ScilifelabDataCentre/open-webui](https://github.com/ScilifelabDataCentre/open-webui)
+   includes this role and supports local signup as well as OAuth/OIDC.
+3. Keep the service token in a trusted backend, reverse proxy, or tightly
+   scoped registration client; never embed an administrative token in browser
+   JavaScript.
+
+The service does not create Open WebUI users, send Slack invitations, or
+publish answers to Slack. Those actions require administrator credentials and
+belong in an explicit approval workflow.
+
+## Helm / OpenLLM deployment
+
+The chart is in [`charts/whale-auth-tools`](charts/whale-auth-tools). It runs
+as non-root, mounts persistent data, adds probes, and references existing
+Kubernetes Secrets; it never creates secret values. It exposes the service
+through an optional Gateway API `HTTPRoute`, not an Ingress resource.
+
+```sh
+helm upgrade --install whale-auth-tools ./charts/whale-auth-tools \
+  --namespace openllm --create-namespace \
+  --set apiTokenSecret.name=whale-auth-tools-secrets \
+  --set altchaSecret.name=whale-auth-tools-secrets
+```
+
+Create `whale-auth-tools-secrets` with the keys `api-token`, `hmac-secret`, and
+`hmac-key-secret`. The example overlay in
+[`deploy/openllm-charts/whale-auth-tools.values.yaml`](deploy/openllm-charts/whale-auth-tools.values.yaml)
+can be used when this chart is installed beside an OpenLLM umbrella release.
+The supplied `ScilifelabDataCentre/openllm-charts` repository could not be read
+publicly during implementation, so the overlay intentionally avoids assuming
+private chart value names.
+
+Configure the route's `gateway.parentRefs` with the name, namespace, and
+listener section of the existing Gateway. `gateway.hostnames` limits the hosts
+accepted by that route; the default path match is `/`.
+
+## Configuration
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `WHALE_AUTH_API_TOKEN` | Yes | — | Token for all API routes |
+| `ALTCHA_HMAC_SECRET` | Yes | — | ALTCHA challenge-signing secret |
+| `ALTCHA_HMAC_KEY_SECRET` | Yes | — | ALTCHA derived-key-signing secret |
+| `DATABASE_PATH` | No | `./data/questionnaires.sqlite3` | SQLite database location |
+| `ALTCHA_REQUIRED` | No | `false` | Require a verified ALTCHA payload for submissions |
+| `ALTCHA_COST` | No | `5000` | ALTCHA PBKDF2 work factor |
+| `ALTCHA_TTL_SECONDS` | No | `600` | Challenge lifetime |
+| `CORS_ORIGINS` | No | empty | Comma-separated trusted browser origins |
+| `DOCS_ENABLED` | No | `true` | Enable `/docs` and `/openapi.json` |
+
+## Development and data handling
+
+The project targets Python 3.11+. Install it with your normal Python
+environment manager and run `pytest`. The test suite covers token protection,
+conditional questionnaire validation, persistence, and ALTCHA verification.
+
+Questionnaire answers may be personal data. Restrict the API token to the
+approval service, encrypt backups, define a retention period with your data
+steward, and use the delete endpoint when a response must be removed. SQLite is
+appropriate for a small single-replica intake service; move persistence to a
+managed database before running multiple replicas.

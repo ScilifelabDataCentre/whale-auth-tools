@@ -1,0 +1,83 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/scilifelabdatacentre/whale-auth-tools
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+apiTokenSecret:
+  name: ""
+  key: api-token
+altchaSecret:
+  name: ""
+  hmacSecretKey: hmac-secret
+  hmacKeySecretKey: hmac-key-secret
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 10001
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+
+service:
+  type: ClusterIP
+  port: 8080
+
+gateway:
+  enabled: false
+  annotations: {}
+  # Gateway API parent references, including the listener section when needed.
+  # parentRefs:
+  #   - name: shared-gateway
+  #     namespace: gateway-system
+  #     sectionName: https
+  parentRefs: []
+  # Optional hostname allow-list. Omit or leave empty to accept the Gateway's
+  # listener hostnames.
+  hostnames: []
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  size: 1Gi
+  existingClaim: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+config:
+  altchaRequired: true
+  altchaAlgorithm: PBKDF2/SHA-256
+  altchaCost: 5000
+  altchaTtlSeconds: 600
+  corsOrigins: ""
+  docsEnabled: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

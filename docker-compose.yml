@@ -1,0 +1,13 @@
+services:
+  whale-auth-tools:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - whale_auth_data:/data
+    restart: unless-stopped
+
+volumes:
+  whale_auth_data:

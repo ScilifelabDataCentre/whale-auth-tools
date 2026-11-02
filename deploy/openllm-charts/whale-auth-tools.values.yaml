@@ -1,0 +1,36 @@
+# Example values for installing charts/whale-auth-tools beside the OpenLLM chart
+# release. Keep the three secret values in an external secret manager; this
+# chart only references the already-created Kubernetes Secret.
+
+image:
+  repository: ghcr.io/scilifelabdatacentre/whale-auth-tools
+  tag: "0.1.0"
+
+apiTokenSecret:
+  name: whale-auth-tools-secrets
+  key: api-token
+altchaSecret:
+  name: whale-auth-tools-secrets
+  hmacSecretKey: hmac-secret
+  hmacKeySecretKey: hmac-key-secret
+
+persistence:
+  enabled: true
+  size: 1Gi
+
+gateway:
+  enabled: true
+  parentRefs:
+    - name: openllm-gateway
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - auth.openllm.example.org
+
+config:
+  # Require a signed ALTCHA response before storing an intake answer.
+  altchaRequired: true
+  # Replace with the public origin of the registration frontend, if it calls
+  # this service directly through a restricted gateway.
+  corsOrigins: https://openllm.example.org
+  docsEnabled: false
