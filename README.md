@@ -129,6 +129,37 @@ Configure the route's `gateway.parentRefs` with the name, namespace, and
 listener section of the existing Gateway. `gateway.hostnames` limits the hosts
 accepted by that route; the default path match is `/`.
 
+### Publishing the Helm chart
+
+The [Publish Helm chart workflow](.github/workflows/publish-helm.yml) validates,
+packages, and publishes the chart to GHCR when a `helm-v*` tag is pushed.
+The tag must match `version` in `charts/whale-auth-tools/Chart.yaml`. Bump that
+version for each new chart release, commit the changes, and push the matching tag:
+
+```sh
+git tag helm-v0.1.0
+git push origin helm-v0.1.0
+```
+
+The workflow uses the built-in `GITHUB_TOKEN` with `packages: write`; no extra
+repository secret is needed. GHCR packages initially default to private; set
+the package visibility to public if anonymous chart installation is required.
+See [GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+After publication, install the chart with:
+
+```sh
+helm upgrade --install whale-auth-tools \
+  oci://ghcr.io/scilifelabdatacentre/whale-auth-tools/charts/whale-auth-tools \
+  --version 0.1.0 \
+  --namespace openllm --create-namespace \
+  --set apiTokenSecret.name=whale-auth-tools-secrets \
+  --set altchaSecret.name=whale-auth-tools-secrets
+```
+
+For a private package, authenticate with `helm registry login ghcr.io` first.
+Chart publication does not publish the application container image.
+
 ## Configuration
 
 | Variable | Required | Default | Description |
