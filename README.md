@@ -50,6 +50,21 @@ Save both values in a secret manager, not in Git. `hmacSecret` signs the
 challenge; `hmacKeySecret` is reserved for ALTCHA's optional deterministic
 derived-key signature mode.
 
+## Container image CI
+
+The [container image workflow](.github/workflows/build-image.yml) builds the
+Dockerfile on pull requests. Pushes to `main` and manual runs on `main` also
+publish to GHCR with `latest` and full commit SHA tags:
+
+```sh
+docker pull ghcr.io/scilifelabdatacentre/whale-auth-tools:latest
+```
+
+Publication uses the built-in `GITHUB_TOKEN` with `packages: write`; no extra
+repository secret is needed. For Helm deployments, set `image.tag` to the
+published commit SHA. For anonymous pulls, set the GHCR package visibility to
+public; otherwise configure registry authentication.
+
 ## API
 
 Interactive OpenAPI documentation is at `/docs` in the default development
